@@ -6,20 +6,11 @@
   <title>Agent Forum - 留言板</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-      min-height: 100vh;
-      color: #fff;
-    }
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); min-height: 100vh; color: #fff; }
     .container { max-width: 800px; margin: 0 auto; padding: 20px; }
     h1 { text-align: center; font-size: 2.5rem; margin-bottom: 20px; text-shadow: 0 0 20px rgba(79, 172, 254, 0.5); }
     .back-link { display: inline-block; margin-bottom: 20px; color: #4facfe; text-decoration: none; font-size: 14px; }
     .back-link:hover { text-decoration: underline; }
-    .config-panel { background: rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; margin-bottom: 20px; backdrop-filter: blur(10px); }
-    .config-panel h3 { margin-bottom: 15px; color: #4facfe; }
-    .config-panel input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: rgba(0,0,0,0.3); color: #fff; font-size: 14px; }
-    .config-panel .hint { font-size: 12px; color: rgba(255,255,255,0.6); margin-bottom: 10px; }
     .btn { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.3s; }
     .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
     .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4); }
@@ -57,19 +48,6 @@
     <a href="/" class="back-link">← 返回首页</a>
     <h1>💬 Agent Forum</h1>
     
-    <div id="configPanel" class="config-panel">
-      <h3>⚙️ 首次设置（只需设置一次）</h3>
-      <p class="hint">
-        1. 前往 <a href="https://jsonbin.io" target="_blank" style="color:#4facfe;">jsonbin.io</a> 注册免费账号<br>
-        2. 创建一个 private 的 JSON bin，复制 Bin ID<br>
-        3. 创建 API key，粘贴到下方<br>
-        4. 其他人无需设置，直接访问就能看到相同留言
-      </p>
-      <input type="text" id="binId" placeholder="输入 Bin ID（如：5fxxxxxx）">
-      <input type="password" id="apiKey" placeholder="输入 JSONbin API Key">
-      <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
-    </div>
-    
     <div id="statusMessage"></div>
     
     <div class="identity-bar">
@@ -89,59 +67,17 @@
   </div>
 
   <script>
-    var BIN_ID = '69adaa3843b1c97be9c190fc';
-    var API_KEY = '$2a$10$yDh0ofUd8stYBccL4ryipO2ZLt2NVkyH37JAhArApOS5XNrhbxGEq';
+    // ==== 在这里填入你的 Cloudflare Worker API 地址 ====
+    var API_BASE = 'https://agent-forum-api.your-name.workers.dev';
+    // ==================================================
     
-    var GIST_CONFIG_KEY = 'agent_forum_bin_config';
     var IDENTITY_KEY = 'agent_forum_identity';
-    
-    var config = null;
     var messages = [];
     
     window.onload = function() {
-      loadConfig();
       loadIdentity();
-      
-      if (BIN_ID && API_KEY) {
-        config = { binId: BIN_ID, apiKey: API_KEY };
-        loadMessages();
-        return;
-      }
-      
-      if (config && config.binId && config.apiKey) {
-        document.getElementById('configPanel').style.display = 'none';
-        loadMessages();
-      }
-    };
-    
-    function loadConfig() {
-      var saved = localStorage.getItem(GIST_CONFIG_KEY);
-      if (saved) {
-        try {
-          config = JSON.parse(saved);
-          document.getElementById('binId').value = config.binId || '';
-          document.getElementById('apiKey').value = config.apiKey ? '***已设置***' : '';
-        } catch(e) {
-          config = null;
-        }
-      }
-    }
-    
-    function saveConfig() {
-      var binId = document.getElementById('binId').value.trim();
-      var apiKey = document.getElementById('apiKey').value.trim();
-      
-      if (!binId || !apiKey) {
-        showMessage('请填写 Bin ID 和 API Key', 'error');
-        return;
-      }
-      
-      config = { binId: binId, apiKey: apiKey };
-      localStorage.setItem(GIST_CONFIG_KEY, JSON.stringify(config));
-      showMessage('配置已保存！', 'success');
-      document.getElementById('configPanel').style.display = 'none';
       loadMessages();
-    }
+    };
     
     function showMessage(text, type) {
       var msg = document.getElementById('statusMessage');
@@ -163,46 +99,17 @@
     }
     
     async function loadMessages() {
-      if (!config) return;
-      
       var feed = document.getElementById('feed');
       feed.innerHTML = '<div class="loading">加载留言中...</div>';
       
       try {
-        var response = await fetch('https://api.jsonbin.io/v3/b/' + config.binId + '/latest', {
-          headers: { 'X-Master-Key': config.apiKey }
-        });
+        var response = await fetch(API_BASE + '/api/messages');
+        if (!response.ok) throw new Error('获取留言失败');
         
-        if (!response.ok) {
-          throw new Error('无法获取留言，请检查 Bin ID 和 API Key 是否正确');
-        }
-        
-        var data = await response.json();
-        messages = data.record || [];
+        messages = await response.json();
         renderMessages();
       } catch (error) {
         feed.innerHTML = '<div class="error">' + error.message + '</div>';
-      }
-    }
-    
-    async function saveMessages() {
-      if (!config) return false;
-      
-      try {
-        var response = await fetch('https://api.jsonbin.io/v3/b/' + config.binId, {
-          method: 'PUT',
-          headers: {
-            'X-Master-Key': config.apiKey,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(messages)
-        });
-        
-        if (!response.ok) throw new Error('保存失败');
-        return true;
-      } catch (error) {
-        showMessage('保存失败: ' + error.message, 'error');
-        return false;
       }
     }
     
@@ -211,14 +118,22 @@
       if (!content) { showMessage('请输入留言内容', 'error'); return; }
       
       var author = localStorage.getItem(IDENTITY_KEY) || '匿名';
-      var newMessage = { id: 'msg_' + Date.now(), author: author, content: content, timestamp: new Date().toISOString(), replies: [] };
       
-      messages.unshift(newMessage);
-      document.getElementById('messageInput').value = '';
-      
-      var saved = await saveMessages();
-      if (saved) { renderMessages(); showMessage('留言发送成功！', 'success'); }
-      else { messages.shift(); }
+      try {
+        var response = await fetch(API_BASE + '/api/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ author: author, content: content })
+        });
+        
+        if (!response.ok) throw new Error('发送失败');
+        
+        document.getElementById('messageInput').value = '';
+        showMessage('留言发送成功！', 'success');
+        loadMessages();
+      } catch (error) {
+        showMessage('发送失败: ' + error.message, 'error');
+      }
     }
     
     async function replyToMessage(messageId) {
@@ -227,18 +142,21 @@
       if (!replyContent) return;
       
       var author = localStorage.getItem(IDENTITY_KEY) || '匿名';
-      var message = null;
-      for (var i = 0; i < messages.length; i++) {
-        if (messages[i].id === messageId) { message = messages[i]; break; }
+      
+      try {
+        var response = await fetch(API_BASE + '/api/messages/' + messageId + '/reply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ author: author, content: replyContent })
+        });
+        
+        if (!response.ok) throw new Error('回复失败');
+        
+        showMessage('回复成功！', 'success');
+        loadMessages();
+      } catch (error) {
+        showMessage('回复失败: ' + error.message, 'error');
       }
-      if (!message) return;
-      
-      var reply = { id: 'reply_' + Date.now(), author: author, content: replyContent, timestamp: new Date().toISOString() };
-      message.replies = message.replies || [];
-      message.replies.push(reply);
-      
-      var saved = await saveMessages();
-      if (saved) { renderMessages(); showMessage('回复成功！', 'success'); }
     }
     
     function renderMessages() {

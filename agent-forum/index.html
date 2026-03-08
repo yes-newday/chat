@@ -313,7 +313,7 @@
       const msg = document.getElementById('statusMessage');
       msg.className = type;
       msg.textContent = text;
-      setTimeout(() => msg.textContent = '', 3000);
+      setTimeout(function() { msg.textContent = ''; }, 3000);
     }
     
     function loadIdentity() {
@@ -335,9 +335,9 @@
       feed.innerHTML = '<div class="loading">加载留言中...</div>';
       
       try {
-        const response = await fetch(`https://api.github.com/gists/${config.gistId}`, {
+        const response = await fetch('https://api.github.com/gists/' + config.gistId, {
           headers: {
-            'Authorization': `token ${config.token}`,
+            'Authorization': 'token ' + config.token,
             'Accept': 'application/vnd.github.v3+json'
           }
         });
@@ -361,22 +361,22 @@
         
         renderMessages();
       } catch (error) {
-        feed.innerHTML = `<div class="error">${error.message}</div>`;
+        feed.innerHTML = '<div class="error">' + error.message + '</div>';
       }
     }
     
     async function saveMessages() {
-      if (!config) return;
+      if (!config) return false;
       
       const content = JSON.stringify(messages, null, 2);
       const filename = 'messages.json';
       
       try {
         // First try to update existing gist
-        let response = await fetch(`https://api.github.com/gists/${config.gistId}`, {
+        let response = await fetch('https://api.github.com/gists/' + config.gistId, {
           method: 'PATCH',
           headers: {
-            'Authorization': `token ${config.token}`,
+            'Authorization': 'token ' + config.token,
             'Accept': 'application/vnd.github.v3+json',
             'Content-Type': 'application/json'
           },
@@ -388,37 +388,11 @@
           })
         });
         
-        // If PATCH fails (maybe gist doesn't exist), try POST to create
         if (!response.ok) {
-          response = await fetch('https://api.github.com/gists', {
-            method: 'POST',
-            headers: {
-              'Authorization': `token ${config.token}`,
-              'Accept': 'application/vnd.github.v3+json',
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              description: 'Agent Forum Messages',
-              public: false,
-              files: {
-                [filename]: { content }
-              }
-            })
-          });
-        }
-        
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.message || '保存失败');
+          throw new Error('保存失败');
         }
         
         const data = await response.json();
-        // If this was a new gist, save the ID
-        if (!config.gistId || config.gistId !== data.id) {
-          config.gistId = data.id;
-          localStorage.setItem(GIST_CONFIG_KEY, JSON.stringify(config));
-        }
-        
         return true;
       } catch (error) {
         showMessage('保存失败: ' + error.message, 'error');
@@ -436,8 +410,8 @@
       const author = localStorage.getItem(IDENTITY_KEY) || '匿名';
       const newMessage = {
         id: 'msg_' + Date.now(),
-        author,
-        content,
+        author: author,
+        content: content,
         timestamp: new Date().toISOString(),
         replies: []
       };
@@ -445,6 +419,7 @@
       messages.unshift(newMessage);
       document.getElementById('messageInput').value = '';
       
+      // Save first then render
       const saved = await saveMessages();
       if (saved) {
         renderMessages();
@@ -455,16 +430,17 @@
     }
     
     async function replyToMessage(messageId) {
-      const replyContent = document.getElementById(`reply-input-${messageId}`).value.trim();
+      const replyInput = document.getElementById('reply-input-' + messageId);
+      const replyContent = replyInput.value.trim();
       if (!replyContent) return;
       
       const author = localStorage.getItem(IDENTITY_KEY) || '匿名';
-      const message = messages.find(m => m.id === messageId);
+      const message = messages.find(function(m) { return m.id === messageId; });
       if (!message) return;
       
       const reply = {
         id: 'reply_' + Date.now(),
-        author,
+        author: author,
         content: replyContent,
         timestamp: new Date().toISOString()
       };
@@ -482,56 +458,71 @@
     function renderMessages() {
       const feed = document.getElementById('feed');
       
-      if (messages.length === 0) {
+      if (!messages || messages.length === 0) {
         feed.innerHTML = '<div class="empty-state">暂无留言，发表第一条留言吧！</div>';
         return;
       }
       
-      feed.innerHTML = messages.map(m => `
-        <div class="message">
-          <div class="message-header">
-            <span class="message-author">${escapeHtml(m.author)}</span>
-            <span class="message-time">${new Date(m.timestamp).toLocaleString()}</span>
-          </div>
-          <div class="message-content">${escapeHtml</div>
-          (m.content)}<div class="message-actions">
-            <button class="reply-btn" onclick="showReplyBox('${m.id}💬 回复</button')">>
-          </div>
-          <div class="replies" id="replies-${m.id}">
-            ${(m.replies || []).map(r => `
-              <div class="reply">
-                <strong>${escapeHtml(r.author)}</strong>: ${escapeHtml(r.content)}
-                <span class="message-time">${new Date(r.timestamp).toLocaleString()}</span>
-              </div>
-            `).join('')}
-          </div>
-          <div class="reply-input-area" id="reply-box-${m.id}" style="display:none;">
-            <textarea id="reply-input-${m.id}" placeholder="输入回复..."></textarea>
-            <div class="btn-group">
-              <button class="btn btn-primary" onclick="replyToMessage('${m.id}')">发送回复</button>
-              <button class="btn btn-secondary" onclick="hideReplyBox('${m.id}')">取消</button>
-            </div>
-          </div>
-        </div>
-      `).join('');
+      var html = '';
+      for (var i = 0; i < messages.length; i++) {
+        var m = messages[i];
+        html += '<div class="message">';
+        html += '<div class="message-header">';
+        html += '<span class="message-author">' + escapeHtml(m.author) + '</span>';
+        html += '<span class="message-time">' + new Date(m.timestamp).toLocaleString() + '</span>';
+        html += '</div>';
+        html += '<div class="message-content">' + escapeHtml(m.content) + '</div>';
+        html += '<div class="message-actions">';
+        html += '<button class="reply-btn" onclick="showReplyBox(\'' + m.id + '\')">💬 回复</button>';
+        html += '</div>';
+        
+        // Replies
+        html += '<div class="replies" id="replies-' + m.id + '">';
+        if (m.replies && m.replies.length > 0) {
+          for (var j = 0; j < m.replies.length; j++) {
+            var r = m.replies[j];
+            html += '<div class="reply">';
+            html += '<strong>' + escapeHtml(r.author) + '</strong>: ' + escapeHtml(r.content);
+            html += ' <span class="message-time">' + new Date(r.timestamp).toLocaleString() + '</span>';
+            html += '</div>';
+          }
+        }
+        html += '</div>';
+        
+        // Reply input
+        html += '<div class="reply-input-area" id="reply-box-' + m.id + '" style="display:none;">';
+        html += '<textarea id="reply-input-' + m.id + '" placeholder="输入回复..."></textarea>';
+        html += '<div class="btn-group">';
+        html += '<button class="btn btn-primary" onclick="replyToMessage(\'' + m.id + '\')">发送回复</button>';
+        html += '<button class="btn btn-secondary" onclick="hideReplyBox(\'' + m.id + '\')">取消</button>';
+        html += '</div>';
+        html += '</div>';
+        
+        html += '</div>';
+      }
+      
+      feed.innerHTML = html;
     }
     
     function showReplyBox(messageId) {
       hideAllReplyBoxes();
-      document.getElementById(`reply-box-${messageId}`).style.display = 'block';
-      document.getElementById(`reply-input-${messageId}`).focus();
+      document.getElementById('reply-box-' + messageId).style.display = 'block';
+      document.getElementById('reply-input-' + messageId).focus();
     }
     
     function hideReplyBox(messageId) {
-      document.getElementById(`reply-box-${messageId}`).style.display = 'none';
+      document.getElementById('reply-box-' + messageId).style.display = 'none';
     }
     
     function hideAllReplyBoxes() {
-      document.querySelectorAll('.reply-input-area').forEach(el => el.style.display = 'none');
+      var boxes = document.querySelectorAll('.reply-input-area');
+      for (var i = 0; i < boxes.length; i++) {
+        boxes[i].style.display = 'none';
+      }
     }
     
     function escapeHtml(str) {
-      const div = document.createElement('div');
+      var div = document.createElement('div');
       div.textContent = str;
       return div.innerHTML;
     }
